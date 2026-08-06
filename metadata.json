@@ -1,0 +1,6 @@
+{
+  "name": "Kumar Guest House",
+  "description": "Hotel booking website for Kumar Guest House with Multi-Tier Admin Panel, Live Room Availability, Loyalty Rewards, and Invoice Generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
