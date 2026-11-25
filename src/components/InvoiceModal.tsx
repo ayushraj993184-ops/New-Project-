@@ -1,49 +1,69 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { Booking } from '../types';
-import {
-  Printer,
-  Download,
-  X,
-  Hotel,
-  CheckCircle2,
-  Phone,
-  Mail,
-  MapPin,
-  ShieldCheck,
-  Award,
-} from 'lucide-react';
+import { CheckCircle2, Download, Hotel, Printer, X } from 'lucide-react';
 
 interface InvoiceModalProps {
   booking: Booking;
   onClose: () => void;
 }
 
+const STATUS_BADGE_MAP: Record<Booking['bookingStatus'], { label: string; style: string }> = {
+  Confirmed: {
+    label: 'INVOICE CONFIRMED',
+    style:
+      'bg-emerald-950/80 text-emerald-400 border-emerald-500/30 print:border-emerald-700 print:text-emerald-800',
+  },
+  'Checked-In': {
+    label: 'CHECKED IN',
+    style:
+      'bg-blue-950/80 text-blue-300 border-blue-500/30 print:border-blue-700 print:text-blue-800',
+  },
+  'Checked-Out': {
+    label: 'CHECKED OUT',
+    style:
+      'bg-zinc-900 text-zinc-300 border-zinc-700 print:border-zinc-500 print:text-zinc-800',
+  },
+  Pending: {
+    label: 'PENDING CONFIRMATION',
+    style:
+      'bg-amber-950/80 text-amber-300 border-amber-500/30 print:border-amber-700 print:text-amber-800',
+  },
+  Cancelled: {
+    label: 'CANCELLED',
+    style:
+      'bg-rose-950/80 text-rose-300 border-rose-500/30 print:border-rose-700 print:text-rose-800',
+  },
+};
+
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) => {
   const { hotelConfig } = useApp();
+  const statusBadge = STATUS_BADGE_MAP[booking.bookingStatus];
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleDownloadJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(booking, null, 2));
+    const blob = new Blob([JSON.stringify(booking, null, 2)], { type: 'application/json' });
+    const objectUrl = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `Invoice_${booking.id}.json`);
+    downloadAnchor.href = objectUrl;
+    downloadAnchor.download = `Invoice_${booking.id}.json`;
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    URL.revokeObjectURL(objectUrl);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:text-black">
-      <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-6 text-white print:border-0 print:shadow-none print:rounded-none print:text-black print:bg-white print:max-w-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto print:static print:p-0 print:bg-white print:text-black print:overflow-visible">
+      <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-6 text-white print:my-0 print:border-0 print:shadow-none print:rounded-none print:text-black print:bg-white print:max-w-none">
         {/* Action Header bar (hidden on print) */}
         <div className="bg-zinc-900 px-6 py-3 border-b border-zinc-800 flex items-center justify-between print:hidden">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-sm font-bold text-white">Booking Confirmation & Printable Invoice</h3>
+            <h3 className="text-sm font-bold text-white">Booking Confirmation &amp; Printable Invoice</h3>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -54,12 +74,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
             </button>
             <button
               onClick={handleDownloadJSON}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-4 h-4" /> Download Data
             </button>
             <button
               onClick={onClose}
+              aria-label="Close invoice"
               className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
             >
               <X className="w-5 h-5" />
@@ -83,15 +104,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
               <p className="text-xs text-zinc-400 print:text-zinc-600 max-w-sm">
                 {hotelConfig.address}
               </p>
-              <p className="text-xs text-zinc-400 print:text-zinc-600 mt-1 flex items-center gap-3">
+              <p className="text-xs text-zinc-400 print:text-zinc-600 mt-1 flex flex-wrap items-center gap-3">
                 <span>Email: {hotelConfig.email}</span>
                 <span>Phone: {hotelConfig.phones.join(', ')}</span>
               </p>
             </div>
 
             <div className="text-right">
-              <div className="inline-block px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold mb-2 print:border-emerald-700 print:text-emerald-800">
-                INVOICE CONFIRMED
+              <div
+                className={`inline-block px-3 py-1 rounded-full border text-xs font-mono font-bold mb-2 ${statusBadge.style}`}
+              >
+                {statusBadge.label}
               </div>
               <div className="text-xs font-mono text-zinc-400 print:text-zinc-700">
                 Invoice ID: <strong className="text-white print:text-black">{booking.id}</strong>
@@ -131,7 +154,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
                 <strong className="text-white print:text-black">Room Category:</strong> {booking.categoryTitle}
               </div>
               <div>
-                <strong className="text-white print:text-black">Assigned Room #:</strong> {booking.roomNumberAssigned || 'Allocated at Desk'}
+                <strong className="text-white print:text-black">Assigned Room #:</strong>{' '}
+                {booking.roomNumberAssigned || 'Allocated at Desk'}
               </div>
               <div>
                 <strong className="text-white print:text-black">Check-In:</strong> {booking.checkInDate} ({hotelConfig.checkInTime})
@@ -167,8 +191,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
                 {booking.seasonalSurchargePerNight > 0 && (
                   <tr>
                     <td className="p-3">
-                      <div className="font-semibold text-amber-300 print:text-amber-800">Peak Season Pilgrimage Surcharge</div>
-                      <div className="text-[10px] text-zinc-400 print:text-zinc-600">Pitrapaksha & Winter Season rate</div>
+                      <div className="font-semibold text-amber-300 print:text-amber-800">Peak Season Pilgrimage Rate</div>
+                      <div className="text-[10px] text-zinc-400 print:text-zinc-600">{hotelConfig.peakSeasonName}</div>
                     </td>
                     <td className="p-3 text-center">+₹{booking.seasonalSurchargePerNight}</td>
                     <td className="p-3 text-center">{booking.stayDurationDays} Night(s)</td>
@@ -191,7 +215,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
 
                 <tr>
                   <td className="p-3 text-zinc-400 print:text-zinc-600" colSpan={3}>
-                    Applicable GST & Maintenance (5%)
+                    Applicable GST &amp; Maintenance (5%)
                   </td>
                   <td className="p-3 text-right text-zinc-400 print:text-zinc-600">
                     +₹{booking.taxAmount}
@@ -217,18 +241,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, onClose }) 
               <div className="font-bold text-zinc-300 print:text-zinc-800 uppercase tracking-wider">
                 Hotel Policy Notes:
               </div>
-              <p>• Mandatory ID check at reception. Standard check-out is strictly 11:00 AM.</p>
+              <p>• Mandatory ID check at reception. Standard check-out is strictly {hotelConfig.checkOutTime}.</p>
               <p>• Contact us for any extension or query: {hotelConfig.email} | {hotelConfig.phones.join(', ')}</p>
             </div>
 
-            {/* Stamp Stamp Placeholder */}
             <div className="text-center p-3 rounded-xl border border-dashed border-amber-500/40 print:border-amber-700 bg-amber-500/5">
               <div className="text-[10px] font-bold text-amber-400 print:text-amber-800 uppercase tracking-wider mb-1">
-                KUMAR GUEST HOUSE
+                {hotelConfig.hotelName.toUpperCase()}
               </div>
               <div className="text-[9px] text-zinc-400 print:text-zinc-600">Authorized Desk Stamp</div>
               <div className="mt-2 text-xs font-mono font-bold text-emerald-400 print:text-emerald-700">
-                [VERIFIED & RECORDED]
+                [{booking.bookingStatus.toUpperCase()}]
               </div>
             </div>
           </div>

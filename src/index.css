@@ -6,7 +6,7 @@
     background-color: #050505;
     color: #e4e4e7;
   }
-  
+
   h1, h2, h3, .font-serif {
     font-family: 'Cormorant Garamond', Georgia, serif;
   }
@@ -38,4 +38,16 @@
 
 .card-immersive:hover {
   border-color: rgba(212, 175, 55, 0.35);
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: auto;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+  }
 }

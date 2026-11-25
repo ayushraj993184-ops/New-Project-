@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { sanitizeHttpUrl } from '../utils/bookingUtils';
 import {
-  MapPin,
-  ExternalLink,
-  Phone,
-  Mail,
   AlertCircle,
   Camera,
-  Image as ImageIcon,
-  Compass,
-  Navigation,
-  Building,
   CheckCircle2,
+  Compass,
+  ExternalLink,
+  Mail,
+  MapPin,
+  Navigation,
+  Phone,
 } from 'lucide-react';
 
 export const LocationGallery: React.FC = () => {
   const { hotelConfig } = useApp();
   const [activeTab, setActiveTab] = useState<'all' | 'rooms' | 'exterior' | 'facilities'>('all');
+  const safeTravelUrl = sanitizeHttpUrl(hotelConfig.googleTravelUrl);
 
   const galleryImages = [
     {
@@ -67,10 +67,10 @@ export const LocationGallery: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-bold uppercase tracking-widest">
             <MapPin className="w-3.5 h-3.5" />
-            <span>PRIME LOCATION & PHOTO TOUR</span>
+            <span>PRIME LOCATION &amp; PHOTO TOUR</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-serif italic text-white">
-            Location, Contact & Gallery
+            Location, Contact &amp; Gallery
           </h2>
           <p className="text-sm text-gray-400">
             Conveniently situated near Vishnupad Temple and Gaya Railway Junction with 24/7 accessibility for pilgrims and tourists.
@@ -82,7 +82,7 @@ export const LocationGallery: React.FC = () => {
           <div className="lg:col-span-5 bg-[#0A0A0A] border border-white/10 rounded-2xl p-6 shadow-xl space-y-6">
             <h3 className="text-lg font-serif italic text-white flex items-center gap-2 border-b border-white/10 pb-3">
               <Navigation className="w-5 h-5 text-[#D4AF37]" />
-              <span>Contact & Location Details</span>
+              <span>Contact &amp; Location Details</span>
             </h3>
 
             {/* Google Travel Direct CTA */}
@@ -98,15 +98,17 @@ export const LocationGallery: React.FC = () => {
               <p className="text-xs text-gray-300 leading-relaxed">
                 Explore real guest reviews, interactive map directions, street view, and verify location coordinates on Google Travel.
               </p>
-              <a
-                href={hotelConfig.googleTravelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-4 rounded-xl bg-[#D4AF37] hover:bg-white text-black font-bold text-xs uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>View on Google Travel</span>
-                <ExternalLink className="w-4 h-4" />
-              </a>
+              {safeTravelUrl && (
+                <a
+                  href={safeTravelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#D4AF37] hover:bg-white text-black font-bold text-xs uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>View on Google Travel</span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </div>
 
             {/* Address & Landmark */}
@@ -158,7 +160,7 @@ export const LocationGallery: React.FC = () => {
           <div className="lg:col-span-7 bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-xl h-full flex flex-col justify-between">
             <div className="p-4 bg-[#0A0A0A] border-b border-white/10 flex items-center justify-between">
               <span className="font-serif italic text-base text-white flex items-center gap-2">
-                <Compass className="w-4 h-4 text-[#D4AF37]" /> Google Maps & Route Guide
+                <Compass className="w-4 h-4 text-[#D4AF37]" /> Google Maps &amp; Route Guide
               </span>
               <span className="text-xs text-gray-400 font-mono">Near Vishnupad Temple</span>
             </div>
@@ -169,21 +171,23 @@ export const LocationGallery: React.FC = () => {
               </div>
               <div className="max-w-md">
                 <h4 className="text-lg font-serif italic text-white mb-1">
-                  Kumar Guest House, Gaya, Bihar
+                  {hotelConfig.hotelName}, Gaya, Bihar
                 </h4>
                 <p className="text-xs text-gray-400">
                   Walkable distance to sacred Vishnupad Temple ghats and 5 minutes drive from Gaya Railway Junction.
                 </p>
               </div>
-              <a
-                href={hotelConfig.googleTravelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-white text-black font-bold text-xs uppercase tracking-widest shadow-lg flex items-center gap-2 cursor-pointer"
-              >
-                <span>Open Google Directions</span>
-                <ExternalLink className="w-4 h-4" />
-              </a>
+              {safeTravelUrl && (
+                <a
+                  href={safeTravelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-white text-black font-bold text-xs uppercase tracking-widest shadow-lg flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Open Google Directions</span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </div>
 
             <div className="p-4 bg-[#050505] border-t border-white/10 grid grid-cols-2 gap-3 text-xs text-gray-400">
@@ -214,46 +218,19 @@ export const LocationGallery: React.FC = () => {
 
             {/* Gallery Category Filter Tabs */}
             <div className="flex items-center gap-1.5 bg-[#0A0A0A] p-1 rounded-xl border border-white/10">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                  activeTab === 'all'
-                    ? 'bg-[#D4AF37] text-black font-extrabold'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setActiveTab('rooms')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                  activeTab === 'rooms'
-                    ? 'bg-[#D4AF37] text-black font-extrabold'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Rooms
-              </button>
-              <button
-                onClick={() => setActiveTab('exterior')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                  activeTab === 'exterior'
-                    ? 'bg-[#D4AF37] text-black font-extrabold'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Exterior
-              </button>
-              <button
-                onClick={() => setActiveTab('facilities')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                  activeTab === 'facilities'
-                    ? 'bg-[#D4AF37] text-black font-extrabold'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Facilities
-              </button>
+              {(['all', 'rooms', 'exterior', 'facilities'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                    activeTab === tab
+                      ? 'bg-[#D4AF37] text-black font-extrabold'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 

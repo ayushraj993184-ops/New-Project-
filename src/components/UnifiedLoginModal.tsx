@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  X,
-  Hotel,
-  User as UserIcon,
-  KeyRound,
-  ShieldCheck,
-  CheckCircle2,
-  Crown,
-  Sparkles,
+  AlertCircle,
   ArrowRight,
+  CheckCircle2,
+  Hotel,
+  KeyRound,
+  Mail,
+  Phone,
+  ShieldCheck,
+  User as UserIcon,
+  UserPlus,
+  X,
 } from 'lucide-react';
 
 interface UnifiedLoginModalProps {
@@ -17,33 +19,55 @@ interface UnifiedLoginModalProps {
 }
 
 export const UnifiedLoginModal: React.FC<UnifiedLoginModalProps> = ({ onClose }) => {
-  const { login, switchRoleDemo, setIsLoginModalOpen } = useApp();
+  const { login, registerCustomer, setIsLoginModalOpen } = useApp();
 
+  const [mode, setMode] = useState<'signin' | 'register'>('signin');
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regPassword, setRegPassword] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
-    if (!usernameOrEmail.trim()) {
-      setFeedback({ type: 'error', text: 'Please enter a valid username or email address.' });
-      return;
-    }
-
-    const res = login(usernameOrEmail);
+    const res = login(usernameOrEmail, password);
     if (res.success) {
       setFeedback({ type: 'success', text: res.message });
       setTimeout(() => {
         setIsLoginModalOpen(false);
-      }, 600);
+      }, 450);
+    } else {
+      setFeedback({ type: 'error', text: res.message });
     }
   };
 
-  const handleQuickDemoRole = (role: 'super_admin' | 'admin' | 'sub_admin' | 'customer') => {
-    switchRoleDemo(role);
-    setIsLoginModalOpen(false);
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+
+    const res = registerCustomer({
+      name: regName,
+      email: regEmail,
+      phone: regPhone,
+      password: regPassword,
+    });
+    if (res.success) {
+      setFeedback({ type: 'success', text: res.message });
+      setTimeout(() => {
+        setIsLoginModalOpen(false);
+      }, 450);
+    } else {
+      setFeedback({ type: 'error', text: res.message });
+    }
+  };
+
+  const switchMode = (nextMode: 'signin' | 'register') => {
+    setMode(nextMode);
+    setFeedback(null);
   };
 
   return (
@@ -57,15 +81,40 @@ export const UnifiedLoginModal: React.FC<UnifiedLoginModalProps> = ({ onClose })
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Kumar Guest House Portal</h2>
-              <p className="text-[11px] text-zinc-400">Unified Single Sign-In Gateway</p>
+              <p className="text-[11px] text-zinc-400">Unified Guest &amp; Staff Sign-In</p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close sign in dialog"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Mode Switcher Tabs */}
+        <div className="px-6 pt-5">
+          <div className="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => switchMode('signin')}
+              className={`py-2 rounded-lg transition-colors cursor-pointer ${
+                mode === 'signin' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('register')}
+              className={`py-2 rounded-lg transition-colors cursor-pointer ${
+                mode === 'register' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              New Guest Sign Up
+            </button>
+          </div>
         </div>
 
         {/* Modal Form Content */}
@@ -74,120 +123,156 @@ export const UnifiedLoginModal: React.FC<UnifiedLoginModalProps> = ({ onClose })
             <span className="font-bold flex items-center gap-1 mb-0.5">
               <ShieldCheck className="w-4 h-4 text-amber-400" /> Smart Multi-Role Gateway:
             </span>
-            Standard users, staff (Sub-Admin), managers (Admin), or owner (Super Admin) log in from this exact form and get redirected automatically to their designated interface!
+            Guests, front-desk staff, managers, and owner accounts sign in from this gateway and are routed to their assigned portal automatically.
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                Username or Email Address
-              </label>
-              <div className="relative">
-                <UserIcon className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  required
-                  value={usernameOrEmail}
-                  onChange={(e) => setUsernameOrEmail(e.target.value)}
-                  placeholder="superadmin, manager, staff, or guest@gmail.com"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
-                />
+          {mode === 'signin' ? (
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Username or Email Address
+                </label>
+                <div className="relative">
+                  <UserIcon className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    value={usernameOrEmail}
+                    onChange={(e) => setUsernameOrEmail(e.target.value)}
+                    placeholder="superadmin, admin, staff, or guest@example.com"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1">Password</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
-                />
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Password</label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
               </div>
-            </div>
 
-            {feedback && (
-              <div
-                className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
-                  feedback.type === 'success'
-                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
-                    : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
-                }`}
+              {feedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                    feedback.type === 'success'
+                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                      : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                  }`}
+                >
+                  {feedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{feedback.text}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{feedback.text}</span>
+                <span>Sign In to Portal</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Full Name</label>
+                <div className="relative">
+                  <UserIcon className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Priya Sharma"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>Sign In to Unified Portal</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          {/* Quick Demo Credentials Panel */}
-          <div className="pt-4 border-t border-zinc-800/80">
-            <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center justify-between">
-              <span>Quick Demo Role Switches (1-Click Test):</span>
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickDemoRole('super_admin')}
-                className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-left transition-colors group cursor-pointer"
-              >
-                <div className="font-bold text-amber-400 text-xs flex items-center justify-between">
-                  <span>Super Admin</span>
-                  <Crown className="w-3.5 h-3.5" />
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="guest@example.com"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
                 </div>
-                <div className="text-[10px] text-zinc-400 font-mono">superadmin / owner</div>
-              </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Phone Number</label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="tel"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    placeholder="10-digit mobile number"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Create Password</label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    required
+                    minLength={4}
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Minimum 4 characters"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {feedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                    feedback.type === 'success'
+                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                      : 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                  }`}
+                >
+                  {feedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{feedback.text}</span>
+                </div>
+              )}
 
               <button
-                type="button"
-                onClick={() => handleQuickDemoRole('admin')}
-                className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-left transition-colors group cursor-pointer"
+                type="submit"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <div className="font-bold text-amber-400 text-xs flex items-center justify-between">
-                  <span>Admin (Manager)</span>
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-[10px] text-zinc-400 font-mono">admin / manager</div>
+                <UserPlus className="w-4 h-4" />
+                <span>Create Guest Account</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemoRole('sub_admin')}
-                className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-left transition-colors group cursor-pointer"
-              >
-                <div className="font-bold text-amber-400 text-xs flex items-center justify-between">
-                  <span>Sub-Admin (Staff)</span>
-                  <UserIcon className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-[10px] text-zinc-400 font-mono">staff / frontdesk</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemoRole('customer')}
-                className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-left transition-colors group cursor-pointer"
-              >
-                <div className="font-bold text-amber-400 text-xs flex items-center justify-between">
-                  <span>Guest Customer</span>
-                  <UserIcon className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-[10px] text-zinc-400 font-mono">guest / Amit Raj</div>
-              </button>
-            </div>
-          </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

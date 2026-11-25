@@ -1,18 +1,11 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import {
-  Hotel,
-  MapPin,
-  Mail,
-  Phone,
-  AlertCircle,
-  ExternalLink,
-  ShieldCheck,
-  Heart,
-} from 'lucide-react';
+import { sanitizeHttpUrl } from '../utils/bookingUtils';
+import { AlertCircle, ExternalLink, Hotel, Mail, MapPin, Phone } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const { hotelConfig, setActiveView, setIsLoginModalOpen } = useApp();
+  const safeTravelUrl = sanitizeHttpUrl(hotelConfig.googleTravelUrl);
 
   return (
     <footer className="bg-[#050505] text-gray-400 border-t border-white/10 pt-12 pb-8 text-xs">
@@ -27,16 +20,18 @@ export const Footer: React.FC = () => {
               <span className="text-xl font-serif italic font-bold text-white">{hotelConfig.hotelName}</span>
             </div>
             <p className="text-gray-400 leading-relaxed pr-4">{hotelConfig.aboutText}</p>
-            <div className="flex items-center gap-2 pt-1">
-              <a
-                href={hotelConfig.googleTravelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-1.5 rounded-lg bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors uppercase tracking-wider"
-              >
-                <MapPin className="w-3.5 h-3.5" /> Google Travel <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
+            {safeTravelUrl && (
+              <div className="flex items-center gap-2 pt-1">
+                <a
+                  href={safeTravelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 rounded-lg bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors uppercase tracking-wider"
+                >
+                  <MapPin className="w-3.5 h-3.5" /> Google Travel <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Column 2: Quick Links */}
@@ -50,17 +45,17 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <button onClick={() => setActiveView('rooms')} className="hover:text-[#D4AF37] transition-colors">
-                  Rooms & Dynamic Pricing
+                  Rooms &amp; Dynamic Pricing
                 </button>
               </li>
               <li>
                 <button onClick={() => setActiveView('gallery')} className="hover:text-[#D4AF37] transition-colors">
-                  Photo Gallery & Location
+                  Photo Gallery &amp; Location
                 </button>
               </li>
               <li>
                 <button onClick={() => setActiveView('faqs')} className="hover:text-[#D4AF37] transition-colors">
-                  Hotel Policies & FAQs
+                  Hotel Policies &amp; FAQs
                 </button>
               </li>
               <li>
@@ -84,9 +79,7 @@ export const Footer: React.FC = () => {
 
               <div className="flex items-start gap-2">
                 <Phone className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-[#D4AF37] font-mono font-bold">{hotelConfig.phones.join(' / ')}</div>
-                </div>
+                <div className="text-[#D4AF37] font-mono font-bold">{hotelConfig.phones.join(' / ')}</div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-[#0A0A0A] border border-white/10 text-[11px] text-gray-400 flex items-start gap-2 mt-2">
@@ -102,7 +95,7 @@ export const Footer: React.FC = () => {
         <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-gray-500">
           <div>© {new Date().getFullYear()} {hotelConfig.hotelName}. All Rights Reserved.</div>
           <div className="flex items-center gap-2 text-[11px]">
-            <span>Gaya Pilgrimage & Tourist Hospitality Services</span>
+            <span>Gaya Pilgrimage &amp; Tourist Hospitality Services</span>
           </div>
         </div>
       </div>

@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { RoomCategory, Booking } from '../types';
+import { RoomCategory } from '../types';
 import {
-  X,
+  addDaysToDateStr,
+  calculateBookingPricing,
+  calculateStayNights,
+  evaluatePromoCode,
+  findAvailableRoomForBooking,
+  getLocalDateStr,
+  isValidPhoneNumber,
+} from '../utils/bookingUtils';
+import {
   Calendar,
-  User,
-  CreditCard,
-  Phone,
-  Mail,
-  Users,
   CheckCircle2,
-  Tag,
-  Sparkles,
-  Printer,
+  CreditCard,
   ShieldAlert,
+  Tag,
+  User,
+  X,
 } from 'lucide-react';
 
 interface BookingModalProps {
@@ -25,16 +29,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
   const {
     hotelConfig,
     currentUser,
-    validatePromoCode,
+    roomInstances,
+    bookings,
+    promoCodes,
     createBooking,
     setInvoiceModalBooking,
   } = useApp();
 
-  // Dates setup (default today to tomorrow)
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const todayStr = getLocalDateStr();
+  const tomorrowStr = addDaysToDateStr(todayStr, 1);
 
   const [guestName, setGuestName] = useState(currentUser?.name || '');
   const [guestEmail, setGuestEmail] = useState(currentUser?.email || '');
@@ -48,95 +51,138 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
   const [guestCount, setGuestCount] = useState(1);
   const [paymentOption, setPaymentOption] = useState<'Paid Online' | 'Pay at Hotel'>('Pay at Hotel');
 
-  // Coupon
   const [promoCodeInput, setPromoCodeInput] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number; msg: string } | null>(null);
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
   const [promoError, setPromoError] = useState('');
+  const [formError, setFormError] = useState('');
 
-  // Calculate stay duration in days
-  const calculateDays = () => {
-    const start = new Date(checkInDate);
-    const end = new Date(checkOutDate);
-    const diffTime = end.getTime() - start.getTime();
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 1;
+  const stayDuration = calculateStayNights(checkInDate, checkOutDate);
+  const isDateRangeValid = checkInDate >= todayStr && stayDuration >= 1;
+
+  const basePricing = useMemo(
+    () =>
+      calculateBookingPricing(
+        category,
+        hotelConfig.isPeakSeasonActive,
+        Math.max(1, stayDuration),
+        0
+      ),
+    [category, hotelConfig.isPeakSeasonActive, stayDuration]
+  );
+
+  const activePromoEval = useMemo(() => {
+    if (!appliedPromoCode) return null;
+    return evaluatePromoCode(promoCodes, appliedPromoCode, basePricing.subtotal, todayStr);
+  }, [appliedPromoCode, promoCodes, basePricing.subtotal, todayStr]);
+
+  const promoDiscount = activePromoEval?.valid ? activePromoEval.discount : 0;
+
+  const pricing = useMemo(
+    () =>
+      calculateBookingPricing(
+        category,
+        hotelConfig.isPeakSeasonActive,
+        Math.max(1, stayDuration),
+        promoDiscount
+      ),
+    [category, hotelConfig.isPeakSeasonActive, stayDuration, promoDiscount]
+  );
+
+  const availableRoomForDates = useMemo(() => {
+    if (!isDateRangeValid) return undefined;
+    return findAvailableRoomForBooking(
+      category,
+      roomInstances,
+      bookings,
+      checkInDate,
+      checkOutDate
+    );
+  }, [category, roomInstances, bookings, checkInDate, checkOutDate, isDateRangeValid]);
+
+  const handleCheckInChange = (nextCheckIn: string) => {
+    setCheckInDate(nextCheckIn);
+    if (checkOutDate <= nextCheckIn) {
+      setCheckOutDate(addDaysToDateStr(nextCheckIn, 1));
+    }
+    setFormError('');
   };
-
-  const stayDuration = calculateDays();
-
-  // Pricing math
-  const basePriceNight = category.basePriceOffSeason;
-  const surchargeNight = hotelConfig.isPeakSeasonActive ? category.basePricePeakSeason - category.basePriceOffSeason : 0;
-  const nightlyTotal = basePriceNight + surchargeNight;
-  const subtotal = nightlyTotal * stayDuration;
-
-  // Promo discount
-  const promoDiscount = appliedPromo ? appliedPromo.discount : 0;
-
-  const discountableSubtotal = Math.max(0, subtotal - promoDiscount);
-  const taxAmount = Math.round(discountableSubtotal * 0.05); // 5% GST
-  const totalAmount = discountableSubtotal + taxAmount;
 
   const handleApplyPromo = () => {
     setPromoError('');
     if (!promoCodeInput.trim()) return;
 
-    const res = validatePromoCode(promoCodeInput, subtotal);
+    const res = evaluatePromoCode(promoCodes, promoCodeInput, basePricing.subtotal, todayStr);
     if (res.valid && res.promo) {
-      setAppliedPromo({
-        code: res.promo.code,
-        discount: res.discount,
-        msg: res.message,
-      });
+      setAppliedPromoCode(res.promo.code);
     } else {
       setPromoError(res.message);
-      setAppliedPromo(null);
+      setAppliedPromoCode(null);
     }
   };
 
   const handleRemovePromo = () => {
-    setAppliedPromo(null);
+    setAppliedPromoCode(null);
     setPromoCodeInput('');
     setPromoError('');
   };
 
   const handleSubmitBooking = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
 
     if (!guestName.trim() || !guestPhone.trim() || !idNumber.trim()) {
-      alert('Please fill in all required guest information fields.');
+      setFormError('Please fill in all required guest information fields.');
       return;
     }
 
-    const newBooking = createBooking({
+    if (!isValidPhoneNumber(guestPhone)) {
+      setFormError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (!isDateRangeValid) {
+      setFormError('Check-out date must be at least 1 night after check-in (from today onwards).');
+      return;
+    }
+
+    if (!availableRoomForDates) {
+      setFormError('No rooms in this category are available for your selected dates.');
+      return;
+    }
+
+    const result = createBooking({
       userId: currentUser?.id,
-      guestName,
-      guestEmail: guestEmail || `${guestPhone}@guest.com`,
-      guestPhone,
+      guestName: guestName.trim(),
+      guestEmail: guestEmail.trim() || `${guestPhone.replace(/\D/g, '')}@guest.example`,
+      guestPhone: guestPhone.trim(),
       idType,
-      idNumber,
+      idNumber: idNumber.trim(),
       categoryId: category.id,
       categoryTitle: category.title,
-      roomNumberAssigned: category.roomNumbers[0] || '101',
+      roomNumberAssigned: availableRoomForDates,
       checkInDate,
       checkOutDate,
       stayDurationDays: stayDuration,
       guestCount,
-      basePricePerNight: basePriceNight,
-      seasonalSurchargePerNight: surchargeNight,
-      subtotal,
-      promoCodeApplied: appliedPromo?.code,
-      promoDiscount,
-      taxAmount,
-      totalAmount,
+      basePricePerNight: pricing.basePriceNight,
+      seasonalSurchargePerNight: pricing.surchargeNight,
+      subtotal: pricing.subtotal,
+      promoCodeApplied: activePromoEval?.valid ? activePromoEval.promo?.code : undefined,
+      promoDiscount: pricing.promoDiscount,
+      taxAmount: pricing.taxAmount,
+      totalAmount: pricing.totalAmount,
       bookingStatus: 'Confirmed',
       paymentStatus: paymentOption,
-      notes: `Booked via Kumar Guest House portal. ID: ${idType} (${idNumber}).`,
+      notes: `Booked via Kumar Guest House portal. ID: ${idType} (${idNumber.trim()}).`,
     });
 
+    if (!result.success || !result.booking) {
+      setFormError(result.message);
+      return;
+    }
+
     onClose();
-    // Auto-open Printable Receipt / Invoice Modal
-    setInvoiceModalBooking(newBooking);
+    setInvoiceModalBooking(result.booking);
   };
 
   return (
@@ -152,6 +198,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
           </div>
           <button
             onClick={onClose}
+            aria-label="Close booking dialog"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -160,6 +207,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
 
         {/* Modal Body Form */}
         <form onSubmit={handleSubmitBooking} className="p-6 space-y-6">
+          {formError && (
+            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800/60 text-xs text-rose-200 flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="grid md:grid-cols-2 gap-6">
             {/* Left Column: Guest Inputs */}
             <div className="space-y-4">
@@ -176,7 +230,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                   required
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="e.g. Amit Kumar Verma"
+                  placeholder="e.g. Priya Sharma"
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -202,7 +256,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                     type="email"
                     value={guestEmail}
                     onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="guest@gmail.com"
+                    placeholder="guest@example.com"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
@@ -236,7 +290,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                     required
                     value={idNumber}
                     onChange={(e) => setIdNumber(e.target.value)}
-                    placeholder="e.g. 4839-2019-9921"
+                    placeholder="e.g. XXXX-XXXX-0001"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
@@ -248,8 +302,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                   <input
                     type="date"
                     required
+                    min={todayStr}
                     value={checkInDate}
-                    onChange={(e) => setCheckInDate(e.target.value)}
+                    onChange={(e) => handleCheckInChange(e.target.value)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
@@ -259,8 +314,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                   <input
                     type="date"
                     required
+                    min={addDaysToDateStr(checkInDate, 1)}
                     value={checkOutDate}
-                    onChange={(e) => setCheckOutDate(e.target.value)}
+                    onChange={(e) => {
+                      setCheckOutDate(e.target.value);
+                      setFormError('');
+                    }}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
@@ -305,8 +364,20 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                   <span className="flex items-center gap-1.5">
                     <CreditCard className="w-4 h-4" /> Booking Cost Breakdown
                   </span>
-                  <span className="text-zinc-400 font-mono text-[11px]">{stayDuration} Night(s)</span>
+                  <span className="text-zinc-400 font-mono text-[11px]">
+                    {Math.max(1, stayDuration)} Night(s)
+                  </span>
                 </h3>
+
+                {/* Room Allocation Preview */}
+                <div className="mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] font-mono flex items-center justify-between">
+                  <span className="text-zinc-400">Room Allocation:</span>
+                  {availableRoomForDates ? (
+                    <span className="text-emerald-400 font-bold">Room #{availableRoomForDates} Ready</span>
+                  ) : (
+                    <span className="text-rose-400 font-bold">Unavailable for selected dates</span>
+                  )}
+                </div>
 
                 {/* Promo Code Input Engine */}
                 <div className="mb-4">
@@ -321,7 +392,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                       placeholder="e.g. WELCOME100 or FESTIVE15"
                       className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-amber-500"
                     />
-                    {appliedPromo ? (
+                    {appliedPromoCode ? (
                       <button
                         type="button"
                         onClick={handleRemovePromo}
@@ -339,14 +410,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                       </button>
                     )}
                   </div>
-                  {appliedPromo && (
+                  {activePromoEval?.valid && (
                     <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> {appliedPromo.msg}
+                      <CheckCircle2 className="w-3.5 h-3.5" /> {activePromoEval.message}
                     </p>
                   )}
-                  {promoError && (
+                  {(promoError || (activePromoEval && !activePromoEval.valid)) && (
                     <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5" /> {promoError}
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />{' '}
+                      {activePromoEval && !activePromoEval.valid
+                        ? activePromoEval.message
+                        : promoError}
                     </p>
                   )}
                 </div>
@@ -354,32 +428,34 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
                 {/* Detailed Math List */}
                 <div className="space-y-2 text-xs text-zinc-300 font-mono pt-2">
                   <div className="flex justify-between">
-                    <span>Base Rate ({stayDuration} night x ₹{basePriceNight})</span>
-                    <span>₹{basePriceNight * stayDuration}</span>
+                    <span>
+                      Base Rate ({Math.max(1, stayDuration)} night x ₹{pricing.basePriceNight})
+                    </span>
+                    <span>₹{pricing.basePriceNight * Math.max(1, stayDuration)}</span>
                   </div>
 
-                  {hotelConfig.isPeakSeasonActive && (
+                  {hotelConfig.isPeakSeasonActive && pricing.surchargeNight > 0 && (
                     <div className="flex justify-between text-amber-400">
-                      <span>Peak Season Surcharge (+₹{surchargeNight}/night)</span>
-                      <span>+₹{surchargeNight * stayDuration}</span>
+                      <span>Peak Season Rate (+₹{pricing.surchargeNight}/night)</span>
+                      <span>+₹{pricing.surchargeNight * Math.max(1, stayDuration)}</span>
                     </div>
                   )}
 
-                  {promoDiscount > 0 && (
+                  {pricing.promoDiscount > 0 && (
                     <div className="flex justify-between text-emerald-400">
-                      <span>Promo Coupon Discount ({appliedPromo?.code})</span>
-                      <span>-₹{promoDiscount}</span>
+                      <span>Promo Coupon Discount ({activePromoEval?.promo?.code})</span>
+                      <span>-₹{pricing.promoDiscount}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between text-zinc-400">
-                    <span>GST & Service Charge (5%)</span>
-                    <span>+₹{taxAmount}</span>
+                    <span>GST &amp; Service Charge (5%)</span>
+                    <span>+₹{pricing.taxAmount}</span>
                   </div>
 
                   <div className="border-t border-zinc-800 pt-2 flex justify-between text-sm font-bold text-white">
                     <span>Total Amount Payable</span>
-                    <span className="text-amber-400 text-lg">₹{totalAmount}</span>
+                    <span className="text-amber-400 text-lg">₹{pricing.totalAmount}</span>
                   </div>
                 </div>
               </div>
@@ -388,10 +464,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({ category, onClose })
               <div className="pt-4 border-t border-zinc-800">
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-extrabold text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={!isDateRangeValid || !availableRoomForDates}
+                  className={`w-full py-3.5 rounded-xl font-extrabold text-sm transition-all flex items-center justify-center gap-2 ${
+                    isDateRangeValid && availableRoomForDates
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-xl shadow-amber-500/20 cursor-pointer'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
                 >
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>Confirm Booking & Generate PDF Receipt</span>
+                  <span>Confirm Booking &amp; Generate PDF Receipt</span>
                 </button>
               </div>
             </div>

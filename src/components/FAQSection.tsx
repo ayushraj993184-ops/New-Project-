@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { HelpCircle, ChevronDown, ShieldCheck, Clock, CheckCircle2, FileText } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock, FileText, HelpCircle, ShieldCheck } from 'lucide-react';
 
 export const FAQSection: React.FC = () => {
   const { faqs, hotelConfig } = useApp();
-  const [openId, setOpenId] = useState<string | null>(faqs[0]?.id || null);
-
   const publishedFaqs = faqs.filter((f) => f.isPublished);
+  const [openId, setOpenId] = useState<string | null>(publishedFaqs[0]?.id || null);
 
   const toggleAccordion = (id: string) => {
     setOpenId(openId === id ? null : id);
@@ -19,10 +18,10 @@ export const FAQSection: React.FC = () => {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-bold uppercase tracking-widest">
             <HelpCircle className="w-3.5 h-3.5" />
-            <span>HOTEL POLICIES & FREQUENTLY ASKED QUESTIONS</span>
+            <span>HOTEL POLICIES &amp; FREQUENTLY ASKED QUESTIONS</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-serif italic text-white">
-            Guest Rules & Information
+            Guest Rules &amp; Information
           </h2>
           <p className="text-sm text-gray-400">
             Check-in rules, cancellation policy, ID requirements, and amenity details managed directly by hotel management.
@@ -33,11 +32,15 @@ export const FAQSection: React.FC = () => {
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-xl bg-[#0A0A0A] border border-white/10 space-y-2">
             <div className="flex items-center gap-2 text-[#D4AF37] font-bold text-xs uppercase tracking-wider">
-              <Clock className="w-4 h-4" /> Check-In & Check-Out Timings
+              <Clock className="w-4 h-4" /> Check-In &amp; Check-Out Timings
             </div>
             <div className="text-xs text-gray-300 font-mono space-y-1">
-              <div>Check-In: <strong>{hotelConfig.checkInTime}</strong></div>
-              <div>Check-Out: <strong>{hotelConfig.checkOutTime}</strong></div>
+              <div>
+                Check-In: <strong>{hotelConfig.checkInTime}</strong>
+              </div>
+              <div>
+                Check-Out: <strong>{hotelConfig.checkOutTime}</strong>
+              </div>
             </div>
           </div>
 
@@ -51,6 +54,23 @@ export const FAQSection: React.FC = () => {
           </div>
         </div>
 
+        {/* House Policies List */}
+        {hotelConfig.policies.length > 0 && (
+          <div className="p-5 rounded-2xl bg-[#0A0A0A] border border-white/10 space-y-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-[#D4AF37]">
+              House Rules &amp; Guest Policies
+            </h3>
+            <ul className="space-y-2 text-xs text-gray-300">
+              {hotelConfig.policies.map((policy, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+                  <span>{policy}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Dynamic FAQ Accordion */}
         <div className="space-y-3">
           <h3 className="text-lg font-serif italic text-white mb-4 flex items-center gap-2">
@@ -58,38 +78,44 @@ export const FAQSection: React.FC = () => {
             <span>Frequently Asked Questions</span>
           </h3>
 
-          {publishedFaqs.map((faq) => {
-            const isOpen = openId === faq.id;
-            return (
-              <div
-                key={faq.id}
-                className="bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden transition-all duration-200"
-              >
-                <button
-                  onClick={() => toggleAccordion(faq.id)}
-                  className="w-full p-4 text-left font-bold text-sm text-white hover:text-[#D4AF37] flex items-center justify-between gap-4 transition-colors cursor-pointer"
+          {publishedFaqs.length === 0 ? (
+            <div className="p-6 text-center bg-[#0A0A0A] border border-white/10 rounded-2xl text-xs text-gray-400">
+              No published FAQs at the moment.
+            </div>
+          ) : (
+            publishedFaqs.map((faq) => {
+              const isOpen = openId === faq.id;
+              return (
+                <div
+                  key={faq.id}
+                  className="bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden transition-all duration-200"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#050505] text-[#D4AF37] border border-[#D4AF37]/30 uppercase">
-                      {faq.category}
+                  <button
+                    onClick={() => toggleAccordion(faq.id)}
+                    className="w-full p-4 text-left font-bold text-sm text-white hover:text-[#D4AF37] flex items-center justify-between gap-4 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#050505] text-[#D4AF37] border border-[#D4AF37]/30 uppercase shrink-0">
+                        {faq.category}
+                      </span>
+                      <span>{faq.question}</span>
                     </span>
-                    {faq.question}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-[#D4AF37] transition-transform duration-200 shrink-0 ${
-                      isOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
+                    <ChevronDown
+                      className={`w-4 h-4 text-[#D4AF37] transition-transform duration-200 shrink-0 ${
+                        isOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
 
-                {isOpen && (
-                  <div className="px-4 pb-4 pt-1 text-xs text-gray-300 leading-relaxed border-t border-white/10 bg-[#050505]/60">
-                    {faq.answer}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  {isOpen && (
+                    <div className="px-4 pb-4 pt-1 text-xs text-gray-300 leading-relaxed border-t border-white/10 bg-[#050505]/60">
+                      {faq.answer}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </section>

@@ -1,28 +1,35 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { RoomBedFilter, RoomClimateFilter } from '../types';
+import { sanitizeHttpUrl } from '../utils/bookingUtils';
 import {
-  Sparkles,
-  MapPin,
-  Calendar,
-  Users,
-  AirVent,
-  Search,
-  ShieldCheck,
-  Zap,
-  Flame,
-  Award,
-  ChevronRight,
   CheckCircle2,
+  ChevronRight,
+  Flame,
+  MapPin,
+  Search,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 
 export const Hero: React.FC = () => {
-  const { hotelConfig, setActiveView, setSelectedCategoryForBooking, roomCategories } = useApp();
+  const {
+    hotelConfig,
+    setActiveView,
+    setRoomClimateFilter,
+    setRoomBedFilter,
+    roomCategories,
+  } = useApp();
 
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterBed, setFilterBed] = useState<string>('all');
+  const [filterType, setFilterType] = useState<RoomClimateFilter>('all');
+  const [filterBed, setFilterBed] = useState<RoomBedFilter>('all');
+  const safeTravelUrl = sanitizeHttpUrl(hotelConfig.googleTravelUrl);
+  const visibleCategories = roomCategories.filter((cat) => cat.isVisible);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setRoomClimateFilter(filterType);
+    setRoomBedFilter(filterBed);
     setActiveView('rooms');
   };
 
@@ -37,7 +44,7 @@ export const Hero: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[#D4AF37] text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
               <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>GAYA'S TRUSTED HOSPITALITY FOR PILGRIMS & FAMILIES</span>
+              <span>GAYA&apos;S TRUSTED HOSPITALITY FOR PILGRIMS &amp; FAMILIES</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-serif italic tracking-tight text-white leading-[1.15]">
@@ -87,22 +94,28 @@ export const Hero: React.FC = () => {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <button
-                onClick={() => setActiveView('rooms')}
+                onClick={() => {
+                  setRoomClimateFilter('all');
+                  setRoomBedFilter('all');
+                  setActiveView('rooms');
+                }}
                 className="px-6 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-white text-black font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer group shadow-lg shadow-[#D4AF37]/10"
               >
-                <span>View Rooms & Availability</span>
+                <span>View Rooms &amp; Availability</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <a
-                href={hotelConfig.googleTravelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-3.5 rounded-xl bg-[#0A0A0A] hover:bg-white/5 text-gray-200 border border-white/10 text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-2"
-              >
-                <MapPin className="w-4 h-4 text-[#D4AF37]" />
-                <span>Google Travel Map</span>
-              </a>
+              {safeTravelUrl && (
+                <a
+                  href={safeTravelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3.5 rounded-xl bg-[#0A0A0A] hover:bg-white/5 text-gray-200 border border-white/10 text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-2"
+                >
+                  <MapPin className="w-4 h-4 text-[#D4AF37]" />
+                  <span>Google Travel Map</span>
+                </a>
+              )}
             </div>
           </div>
 
@@ -125,39 +138,20 @@ export const Hero: React.FC = () => {
                     Climate Preference
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFilterType('all')}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        filterType === 'all'
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      All Types
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterType('AC')}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        filterType === 'AC'
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      AC Rooms
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterType('Non-AC')}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        filterType === 'Non-AC'
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      Non-AC
-                    </button>
+                    {(['all', 'AC', 'Non-AC'] as RoomClimateFilter[]).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setFilterType(opt)}
+                        className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                          filterType === opt
+                            ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
+                            : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
+                        }`}
+                      >
+                        {opt === 'all' ? 'All Types' : opt === 'AC' ? 'AC Rooms' : 'Non-AC'}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -166,28 +160,27 @@ export const Hero: React.FC = () => {
                     Bed Specification
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFilterBed('Single Bed')}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        filterBed === 'Single Bed'
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      Single Bed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterBed('Double Bed')}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        filterBed === 'Double Bed'
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      Double Bed
-                    </button>
+                    {(
+                      [
+                        { value: 'all', label: 'Any Bed' },
+                        { value: 'Single Bed', label: 'Single Bed' },
+                        { value: 'Double Bed', label: 'Double Bed' },
+                        { value: 'Deluxe Family Bed', label: 'Family Suite' },
+                      ] as { value: RoomBedFilter; label: string }[]
+                    ).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFilterBed(opt.value)}
+                        className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                          filterBed === opt.value
+                            ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
+                            : 'bg-[#050505] text-gray-400 border-white/10 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -196,9 +189,11 @@ export const Hero: React.FC = () => {
                     <CheckCircle2 className="w-4 h-4" /> Direct Booking Standard Rates:
                   </div>
                   <ul className="list-disc list-inside space-y-1 text-gray-400 font-mono text-[11px]">
-                    <li>Non AC Single Bed: ₹900 – ₹1000</li>
-                    <li>Non AC Double Bed: ₹1100 – ₹1400</li>
-                    <li>AC Double Bed: ₹1500 – ₹2200</li>
+                    {visibleCategories.map((cat) => (
+                      <li key={cat.id}>
+                        {cat.title}: ₹{cat.basePriceOffSeason} – ₹{cat.basePricePeakSeason}
+                      </li>
+                    ))}
                   </ul>
                 </div>
 

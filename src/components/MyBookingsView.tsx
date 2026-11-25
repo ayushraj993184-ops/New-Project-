@@ -1,16 +1,15 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import {
-  Calendar,
-  Printer,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  FileText,
-  Building,
-  User,
-  ArrowRight,
-} from 'lucide-react';
+import { Booking } from '../types';
+import { Calendar, FileText, User } from 'lucide-react';
+
+const BOOKING_STATUS_BADGE: Record<Booking['bookingStatus'], string> = {
+  Confirmed: 'bg-emerald-950 text-emerald-300 border border-emerald-800',
+  'Checked-In': 'bg-blue-950 text-blue-300 border border-blue-800',
+  'Checked-Out': 'bg-zinc-800 text-zinc-300 border border-zinc-700',
+  Pending: 'bg-amber-950 text-amber-300 border border-amber-800',
+  Cancelled: 'bg-rose-950 text-rose-300 border border-rose-800',
+};
 
 export const MyBookingsView: React.FC = () => {
   const { currentUser, bookings, setInvoiceModalBooking, setActiveView, setIsLoginModalOpen } = useApp();
@@ -25,7 +24,7 @@ export const MyBookingsView: React.FC = () => {
         </p>
         <button
           onClick={() => setIsLoginModalOpen(true)}
-          className="px-6 py-2.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs"
+          className="px-6 py-2.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs cursor-pointer"
         >
           Sign In Now
         </button>
@@ -39,12 +38,11 @@ export const MyBookingsView: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-8 text-white">
-      {/* Reservation List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Calendar className="w-5 h-5 text-amber-400" />
-            <span>My Active & Past Reservations</span>
+            <span>My Active &amp; Past Reservations</span>
           </h3>
           <span className="text-xs font-mono text-zinc-400">{myBookings.length} Total Bookings</span>
         </div>
@@ -54,9 +52,9 @@ export const MyBookingsView: React.FC = () => {
             <p className="text-sm text-zinc-400">No active bookings found for your account.</p>
             <button
               onClick={() => setActiveView('rooms')}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs"
+              className="px-5 py-2.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs cursor-pointer"
             >
-              Browse Rooms & Book Now
+              Browse Rooms &amp; Book Now
             </button>
           </div>
         ) : (
@@ -71,25 +69,31 @@ export const MyBookingsView: React.FC = () => {
                     <span className="font-bold text-white text-base">{b.categoryTitle}</span>
                     <span
                       className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                        b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Checked-In'
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                          : 'bg-zinc-800 text-zinc-400'
+                        BOOKING_STATUS_BADGE[b.bookingStatus]
                       }`}
                     >
                       {b.bookingStatus}
                     </span>
                   </div>
                   <div className="text-xs text-zinc-400 flex flex-wrap items-center gap-3">
-                    <span>ID: <strong className="text-zinc-200 font-mono">{b.id}</strong></span>
-                    <span>Check-in: <strong className="text-zinc-200 font-mono">{b.checkInDate}</strong></span>
-                    <span>Check-out: <strong className="text-zinc-200 font-mono">{b.checkOutDate}</strong></span>
-                    <span>Room #: <strong className="text-amber-400 font-mono">{b.roomNumberAssigned || 'Allocated at Desk'}</strong></span>
+                    <span>
+                      ID: <strong className="text-zinc-200 font-mono">{b.id}</strong>
+                    </span>
+                    <span>
+                      Check-in: <strong className="text-zinc-200 font-mono">{b.checkInDate}</strong>
+                    </span>
+                    <span>
+                      Check-out: <strong className="text-zinc-200 font-mono">{b.checkOutDate}</strong>
+                    </span>
+                    <span>
+                      Room #: <strong className="text-amber-400 font-mono">{b.roomNumberAssigned || 'Allocated at Desk'}</strong>
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-800">
                   <div className="text-right">
-                    <div className="text-[10px] text-zinc-400">Total Paid</div>
+                    <div className="text-[10px] text-zinc-400">Total Amount</div>
                     <div className="text-lg font-black text-amber-400 font-mono">₹{b.totalAmount}</div>
                   </div>
 

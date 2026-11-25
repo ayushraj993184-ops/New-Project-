@@ -2,17 +2,7 @@ import React from 'react';
 import { useApp } from '../context/AppContext';
 import { RoomCategory, RoomStatus } from '../types';
 import { DynamicIcon } from './DynamicIcon';
-import {
-  Users,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  BedDouble,
-  AirVent,
-  ChevronRight,
-  ShieldCheck,
-} from 'lucide-react';
+import { ChevronRight, Users } from 'lucide-react';
 
 interface RoomCardProps {
   category: RoomCategory;
@@ -22,14 +12,19 @@ interface RoomCardProps {
 export const RoomCard: React.FC<RoomCardProps> = ({ category, onBookNow }) => {
   const { hotelConfig, amenities, roomInstances } = useApp();
 
-  // Find live status across room numbers for this category
   const categoryInstances = roomInstances.filter((inst) => inst.categoryId === category.id);
   const availableCount = categoryInstances.filter((inst) => inst.status === 'Available').length;
   const totalCount = categoryInstances.length;
 
-  // Derive status badge
-  const status: RoomStatus =
-    availableCount > 0 ? 'Available' : category.liveStatus || 'Occupied';
+  const deriveStatus = (): RoomStatus => {
+    if (availableCount > 0) return 'Available';
+    if (totalCount === 0) return category.liveStatus === 'Available' ? 'Occupied' : category.liveStatus;
+    if (categoryInstances.every((i) => i.status === 'Cleaning/Maintenance')) return 'Cleaning/Maintenance';
+    if (categoryInstances.some((i) => i.status === 'Reserved')) return 'Reserved';
+    return 'Occupied';
+  };
+
+  const status = deriveStatus();
 
   const getStatusBadge = (st: RoomStatus) => {
     switch (st) {
@@ -57,23 +52,15 @@ export const RoomCard: React.FC<RoomCardProps> = ({ category, onBookNow }) => {
           bg: 'bg-blue-950/80 text-blue-300 border-blue-500/40',
           dot: 'bg-blue-400',
         };
-      default:
-        return {
-          label: 'Check Staff Status',
-          bg: 'bg-zinc-800 text-zinc-300 border-zinc-700',
-          dot: 'bg-zinc-400',
-        };
     }
   };
 
   const statusStyle = getStatusBadge(status);
 
-  // Price calculation
   const currentPrice = hotelConfig.isPeakSeasonActive
     ? category.basePricePeakSeason
     : category.basePriceOffSeason;
 
-  // Get associated amenity details
   const categoryAmenities = amenities.filter(
     (a) => a.isGlobal || category.amenityIds.includes(a.id)
   );
@@ -123,7 +110,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({ category, onBookNow }) => {
           </div>
           {hotelConfig.isPeakSeasonActive && (
             <span className="text-[10px] text-[#D4AF37] bg-[#050505]/90 border border-[#D4AF37]/30 px-2 py-0.5 rounded font-mono">
-              Base: ₹{category.basePriceOffSeason}
+              Off-Season: ₹{category.basePriceOffSeason}
             </span>
           )}
         </div>
@@ -132,11 +119,11 @@ export const RoomCard: React.FC<RoomCardProps> = ({ category, onBookNow }) => {
       {/* Content */}
       <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1.5 gap-2">
             <h3 className="text-xl font-serif italic text-white group-hover:text-[#D4AF37] transition-colors">
               {category.title}
             </h3>
-            <span className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 bg-[#050505] px-2 py-1 rounded border border-white/10">
+            <span className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 bg-[#050505] px-2 py-1 rounded border border-white/10 shrink-0">
               <Users className="w-3.5 h-3.5 text-[#D4AF37]" /> Max {category.maxCapacity}
             </span>
           </div>

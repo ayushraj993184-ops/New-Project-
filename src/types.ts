@@ -1,10 +1,28 @@
 export type UserRole = 'customer' | 'super_admin' | 'admin' | 'sub_admin';
 
+export type ActiveView = 'home' | 'rooms' | 'gallery' | 'faqs' | 'my-bookings' | 'admin';
+
+export type AdminTab =
+  | 'availability'
+  | 'bookings'
+  | 'categories'
+  | 'amenities'
+  | 'promos'
+  | 'faqs'
+  | 'staff'
+  | 'audit'
+  | 'settings';
+
+export type RoomClimateFilter = 'all' | 'AC' | 'Non-AC';
+export type RoomBedFilter = 'all' | 'Single Bed' | 'Double Bed' | 'Deluxe Family Bed';
+
 export interface User {
   id: string;
   name: string;
   email: string;
   username: string;
+  /** Client-side demo passcode until backend authentication is wired up. */
+  password?: string;
   role: UserRole;
   phone?: string;
   idType?: 'Aadhaar Card' | 'Voter ID' | 'School/College ID card';

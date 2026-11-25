@@ -1,28 +1,63 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-  User,
-  UserRole,
-  RoomCategory,
-  RoomInstanceStatus,
-  RoomStatus,
+  ActiveView,
+  AdminTab,
   Amenity,
-  PromoCode,
   Booking,
-  StaffAuditLog,
   FAQItem,
   HotelConfig,
+  PromoCode,
+  RoomBedFilter,
+  RoomCategory,
+  RoomClimateFilter,
+  RoomInstanceStatus,
+  RoomStatus,
+  StaffAuditLog,
+  User,
+  UserRole,
 } from '../types';
 import {
-  initialHotelConfig,
-  initialUsers,
   initialAmenities,
+  initialAuditLogs,
+  initialBookings,
+  initialFAQs,
+  initialHotelConfig,
+  initialPromoCodes,
   initialRoomCategories,
   initialRoomInstances,
-  initialPromoCodes,
-  initialBookings,
-  initialAuditLogs,
-  initialFAQs,
+  initialUsers,
 } from '../data/initialData';
+import {
+  calculateStayNights,
+  evaluatePromoCode,
+  findAvailableRoomForBooking,
+  generateBookingId,
+  isRoomBookedForDates,
+  type PromoEvaluationResult,
+} from '../utils/bookingUtils';
+
+const STORAGE_KEYS = [
+  'hotelConfig',
+  'users',
+  'currentUser',
+  'roomCategories',
+  'roomInstances',
+  'amenities',
+  'promoCodes',
+  'bookings',
+  'auditLogs',
+  'faqs',
+] as const;
+
+export type CreateBookingInput = Omit<Booking, 'id' | 'createdAt' | 'roomNumberAssigned'> & {
+  roomNumberAssigned?: string;
+};
+
+export interface CreateBookingResult {
+  success: boolean;
+  booking?: Booking;
+  message: string;
+}
 
 interface AppContextType {
   // State
@@ -36,8 +71,10 @@ interface AppContextType {
   bookings: Booking[];
   auditLogs: StaffAuditLog[];
   faqs: FAQItem[];
-  activeView: 'home' | 'rooms' | 'gallery' | 'faqs' | 'my-bookings' | 'admin';
-  adminTab: string;
+  activeView: ActiveView;
+  adminTab: AdminTab;
+  roomClimateFilter: RoomClimateFilter;
+  roomBedFilter: RoomBedFilter;
 
   // Active Modals & Selected Items
   isLoginModalOpen: boolean;
@@ -47,9 +84,11 @@ interface AppContextType {
   welcomeUser: User | null;
   showWelcomeModal: boolean;
 
-  // Actions
-  setActiveView: (view: 'home' | 'rooms' | 'gallery' | 'faqs' | 'my-bookings' | 'admin') => void;
-  setAdminTab: (tab: string) => void;
+  // Navigation & Filters
+  setActiveView: (view: ActiveView) => void;
+  setAdminTab: (tab: AdminTab) => void;
+  setRoomClimateFilter: (filter: RoomClimateFilter) => void;
+  setRoomBedFilter: (filter: RoomBedFilter) => void;
   setIsLoginModalOpen: (open: boolean) => void;
   setIsBookingModalOpen: (open: boolean) => void;
   setSelectedCategoryForBooking: (category: RoomCategory | null) => void;
@@ -58,9 +97,14 @@ interface AppContextType {
   triggerWelcomeAnimation: (user?: User) => void;
 
   // Auth
-  login: (usernameOrEmail: string) => { success: boolean; role?: UserRole; message: string };
+  login: (usernameOrEmail: string, password: string) => { success: boolean; role?: UserRole; message: string };
+  registerCustomer: (data: {
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+  }) => { success: boolean; message: string };
   logout: () => void;
-  switchRoleDemo: (role: UserRole) => void;
 
   // Audit Logs
   logStaffAction: (category: StaffAuditLog['actionCategory'], details: string) => void;
@@ -80,10 +124,10 @@ interface AppContextType {
   addPromoCode: (code: Omit<PromoCode, 'id' | 'usageCount'>) => void;
   updatePromoCode: (id: string, updated: Partial<PromoCode>) => void;
   deletePromoCode: (id: string) => void;
-  validatePromoCode: (codeStr: string, totalAmount: number) => { valid: boolean; promo?: PromoCode; discount: number; message: string };
+  validatePromoCode: (codeStr: string, totalAmount: number) => PromoEvaluationResult;
 
   // Bookings
-  createBooking: (bookingData: Omit<Booking, 'id' | 'createdAt'>) => Booking;
+  createBooking: (bookingData: CreateBookingInput) => CreateBookingResult;
   updateBookingStatus: (id: string, status: Booking['bookingStatus'], roomNumber?: string) => void;
 
   // FAQs & Policies
@@ -104,43 +148,77 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function getStored<T>(key: string, fallback: T): T {
+  try {
+    const item = localStorage.getItem(`kgh_${key}`);
+    return item ? (JSON.parse(item) as T) : fallback;
+  } catch (e) {
+    console.error(`Failed to parse localStorage key kgh_${key}`, e);
+    return fallback;
+  }
+}
+
+function setStored<T>(key: string, value: T) {
+  try {
+    localStorage.setItem(`kgh_${key}`, JSON.stringify(value));
+  } catch (e) {
+    console.error(`Failed to write localStorage key kgh_${key}`, e);
+  }
+}
+
+function createAuditEntry(
+  actor: User | null,
+  category: StaffAuditLog['actionCategory'],
+  details: string
+): StaffAuditLog {
+  return {
+    id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    timestamp: new Date().toISOString(),
+    staffName: actor ? actor.name : 'Guest / System',
+    staffRole: actor ? actor.role : 'customer',
+    actionCategory: category,
+    details,
+  };
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Helper to read localStorage safely
-  const getStored = <T,>(key: string, fallback: T): T => {
-    try {
-      const item = localStorage.getItem(`kgh_${key}`);
-      return item ? JSON.parse(item) : fallback;
-    } catch (e) {
-      console.error(e);
-      return fallback;
-    }
-  };
-
-  const setStored = <T,>(key: string, value: T) => {
-    try {
-      localStorage.setItem(`kgh_${key}`, JSON.stringify(value));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const [hotelConfig, setHotelConfigState] = useState<HotelConfig>(() => getStored('hotelConfig', initialHotelConfig));
+  const [hotelConfig, setHotelConfigState] = useState<HotelConfig>(() =>
+    getStored('hotelConfig', initialHotelConfig)
+  );
   const [users, setUsersState] = useState<User[]>(() => getStored('users', initialUsers));
-  const [currentUser, setCurrentUserState] = useState<User | null>(() => getStored('currentUser', initialUsers[3])); // Default Amit Raj (guest)
-  const [roomCategories, setRoomCategoriesState] = useState<RoomCategory[]>(() => getStored('roomCategories', initialRoomCategories));
-  const [roomInstances, setRoomInstancesState] = useState<RoomInstanceStatus[]>(() => getStored('roomInstances', initialRoomInstances));
-  const [amenities, setAmenitiesState] = useState<Amenity[]>(() => getStored('amenities', initialAmenities));
-  const [promoCodes, setPromoCodesState] = useState<PromoCode[]>(() => getStored('promoCodes', initialPromoCodes));
-  const [bookings, setBookingsState] = useState<Booking[]>(() => getStored('bookings', initialBookings));
-  const [auditLogs, setAuditLogsState] = useState<StaffAuditLog[]>(() => getStored('auditLogs', initialAuditLogs));
+  const [currentUser, setCurrentUserState] = useState<User | null>(() =>
+    getStored<User | null>('currentUser', null)
+  );
+  const [roomCategories, setRoomCategoriesState] = useState<RoomCategory[]>(() =>
+    getStored('roomCategories', initialRoomCategories)
+  );
+  const [roomInstances, setRoomInstancesState] = useState<RoomInstanceStatus[]>(() =>
+    getStored('roomInstances', initialRoomInstances)
+  );
+  const [amenities, setAmenitiesState] = useState<Amenity[]>(() =>
+    getStored('amenities', initialAmenities)
+  );
+  const [promoCodes, setPromoCodesState] = useState<PromoCode[]>(() =>
+    getStored('promoCodes', initialPromoCodes)
+  );
+  const [bookings, setBookingsState] = useState<Booking[]>(() =>
+    getStored('bookings', initialBookings)
+  );
+  const [auditLogs, setAuditLogsState] = useState<StaffAuditLog[]>(() =>
+    getStored('auditLogs', initialAuditLogs)
+  );
   const [faqs, setFaqsState] = useState<FAQItem[]>(() => getStored('faqs', initialFAQs));
 
-  const [activeView, setActiveView] = useState<'home' | 'rooms' | 'gallery' | 'faqs' | 'my-bookings' | 'admin'>('home');
-  const [adminTab, setAdminTab] = useState<string>('availability');
+  const [activeView, setActiveView] = useState<ActiveView>('home');
+  const [adminTab, setAdminTab] = useState<AdminTab>('availability');
+  const [roomClimateFilter, setRoomClimateFilter] = useState<RoomClimateFilter>('all');
+  const [roomBedFilter, setRoomBedFilter] = useState<RoomBedFilter>('all');
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
-  const [selectedCategoryForBooking, setSelectedCategoryForBooking] = useState<RoomCategory | null>(null);
+  const [selectedCategoryForBooking, setSelectedCategoryForBooking] = useState<RoomCategory | null>(
+    null
+  );
   const [invoiceModalBooking, setInvoiceModalBooking] = useState<Booking | null>(null);
   const [welcomeUser, setWelcomeUser] = useState<User | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
@@ -153,7 +231,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Sync state to localStorage
   useEffect(() => setStored('hotelConfig', hotelConfig), [hotelConfig]);
   useEffect(() => setStored('users', users), [users]);
   useEffect(() => setStored('currentUser', currentUser), [currentUser]);
@@ -165,135 +242,180 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => setStored('auditLogs', auditLogs), [auditLogs]);
   useEffect(() => setStored('faqs', faqs), [faqs]);
 
-  // Audit Log helper
-  const logStaffAction = (category: StaffAuditLog['actionCategory'], details: string) => {
-    const staffName = currentUser ? currentUser.name : 'System';
-    const staffRole = currentUser ? currentUser.role : 'sub_admin';
-    const newLog: StaffAuditLog = {
-      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      timestamp: new Date().toISOString(),
-      staffName,
-      staffRole,
-      actionCategory: category,
-      details,
-    };
+  const appendAuditLog = (
+    actor: User | null,
+    category: StaffAuditLog['actionCategory'],
+    details: string
+  ) => {
+    const newLog = createAuditEntry(actor, category, details);
     setAuditLogsState((prev) => [newLog, ...prev]);
   };
 
-  // Auth: Unified Login
-  const login = (usernameOrEmail: string) => {
+  const logStaffAction = (category: StaffAuditLog['actionCategory'], details: string) => {
+    appendAuditLog(currentUser, category, details);
+  };
+
+  const login = (usernameOrEmail: string, password: string) => {
     const query = usernameOrEmail.trim().toLowerCase();
+    if (!query) {
+      return { success: false, message: 'Please enter your username or email address.' };
+    }
+
     const found = users.find(
       (u) => u.username.toLowerCase() === query || u.email.toLowerCase() === query
     );
 
-    if (found) {
-      setCurrentUserState(found);
-      setIsLoginModalOpen(false);
-      setWelcomeUser(found);
-      setShowWelcomeModal(true);
-      logStaffAction('Staff Config', `User "${found.name}" (${found.role}) logged in successfully.`);
-
-      if (found.role === 'super_admin' || found.role === 'admin' || found.role === 'sub_admin') {
-        setActiveView('admin');
-        if (found.role === 'sub_admin') {
-          setAdminTab('availability');
-        } else if (found.role === 'admin') {
-          setAdminTab('bookings');
-        } else {
-          setAdminTab('availability');
-        }
-        return {
-          success: true,
-          role: found.role,
-          message: `Welcome back, ${found.name}! Redirected to ${found.role.replace('_', ' ').toUpperCase()} Dashboard.`,
-        };
-      } else {
-        setActiveView('home');
-        return {
-          success: true,
-          role: found.role,
-          message: `Logged in as Customer (${found.name}).`,
-        };
-      }
+    if (!found) {
+      return {
+        success: false,
+        message: 'No account found with that username or email. Register as a new guest if needed.',
+      };
     }
 
-    // Auto-create standard customer if non-admin login entered
+    if (found.password && password !== found.password) {
+      return {
+        success: false,
+        message: 'Incorrect password. Please check your credentials and try again.',
+      };
+    }
+
+    setCurrentUserState(found);
+    setWelcomeUser(found);
+    setShowWelcomeModal(true);
+    appendAuditLog(found, 'Staff Config', `User "${found.name}" (${found.role}) signed in.`);
+
+    if (found.role === 'super_admin' || found.role === 'admin' || found.role === 'sub_admin') {
+      setActiveView('admin');
+      setAdminTab(found.role === 'admin' ? 'bookings' : 'availability');
+      return {
+        success: true,
+        role: found.role,
+        message: `Welcome back, ${found.name}! Redirecting to ${found.role.replace('_', ' ').toUpperCase()} Console.`,
+      };
+    }
+
+    setActiveView('home');
+    return {
+      success: true,
+      role: found.role,
+      message: `Signed in as ${found.name}.`,
+    };
+  };
+
+  const registerCustomer = ({
+    name,
+    email,
+    phone,
+    password,
+  }: {
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+  }) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    if (!cleanName || !cleanEmail || !password.trim()) {
+      return { success: false, message: 'Name, email, and password are required.' };
+    }
+
+    const exists = users.some(
+      (u) => u.email.toLowerCase() === cleanEmail || u.username.toLowerCase() === cleanEmail
+    );
+    if (exists) {
+      return {
+        success: false,
+        message: 'An account with that email already exists. Please sign in instead.',
+      };
+    }
+
     const newGuestUser: User = {
       id: `user-guest-${Date.now()}`,
-      name: usernameOrEmail.split('@')[0] || 'Valued Guest',
-      email: usernameOrEmail.includes('@') ? usernameOrEmail : `${usernameOrEmail}@guest.com`,
-      username: usernameOrEmail.toLowerCase(),
+      name: cleanName,
+      email: cleanEmail,
+      username: cleanEmail,
+      password,
+      phone: phone.trim() || undefined,
       role: 'customer',
       createdAt: new Date().toISOString(),
     };
+
     setUsersState((prev) => [...prev, newGuestUser]);
     setCurrentUserState(newGuestUser);
-    setIsLoginModalOpen(false);
     setWelcomeUser(newGuestUser);
     setShowWelcomeModal(true);
+    setActiveView('home');
+    appendAuditLog(newGuestUser, 'Staff Config', `New guest registered: "${newGuestUser.name}".`);
+
     return {
       success: true,
-      role: 'customer',
-      message: `Welcome! Created customer account for ${newGuestUser.name}.`,
+      message: `Account created! Welcome, ${newGuestUser.name}.`,
     };
   };
 
   const logout = () => {
     if (currentUser) {
-      logStaffAction('Staff Config', `User "${currentUser.name}" logged out.`);
+      appendAuditLog(currentUser, 'Staff Config', `User "${currentUser.name}" signed out.`);
     }
     setCurrentUserState(null);
     setWelcomeUser(null);
     setShowWelcomeModal(false);
-    setActiveView('home');
+    setActiveView((prev) => (prev === 'admin' || prev === 'my-bookings' ? 'home' : prev));
   };
 
-  const switchRoleDemo = (role: UserRole) => {
-    const target = users.find((u) => u.role === role);
-    if (target) {
-      setCurrentUserState(target);
-      setWelcomeUser(target);
-      setShowWelcomeModal(true);
-      if (role !== 'customer') {
-        setActiveView('admin');
-        setAdminTab(role === 'sub_admin' ? 'availability' : 'bookings');
-      } else {
-        setActiveView('home');
-      }
-      logStaffAction('Staff Config', `Switched demo role to ${role} (${target.name})`);
-    }
-  };
-
-  // Room CRUD
   const addRoomCategory = (categoryData: Omit<RoomCategory, 'id'>) => {
     const id = `cat-${Date.now()}`;
-    const newCategory: RoomCategory = { ...categoryData, id };
+    const uniqueRoomNums = Array.from(new Set(categoryData.roomNumbers.map((n) => n.trim()).filter(Boolean)));
+    const newCategory: RoomCategory = { ...categoryData, roomNumbers: uniqueRoomNums, id };
     setRoomCategoriesState((prev) => [...prev, newCategory]);
 
-    // Instantiate room instances
-    const newInstances: RoomInstanceStatus[] = categoryData.roomNumbers.map((num) => ({
+    const newInstances: RoomInstanceStatus[] = uniqueRoomNums.map((num) => ({
       roomNumber: num,
       categoryId: id,
       status: 'Available',
     }));
     setRoomInstancesState((prev) => [...prev, ...newInstances]);
 
-    logStaffAction('Room Management', `Created new room category: "${newCategory.title}" with rooms (${newCategory.roomNumbers.join(', ')})`);
+    logStaffAction(
+      'Room Management',
+      `Created room category "${newCategory.title}" with rooms (${uniqueRoomNums.join(', ')})`
+    );
   };
 
   const updateRoomCategory = (id: string, updated: Partial<RoomCategory>) => {
+    const normalizedNumbers = updated.roomNumbers
+      ? Array.from(new Set(updated.roomNumbers.map((n) => n.trim()).filter(Boolean)))
+      : undefined;
+
     setRoomCategoriesState((prev) =>
-      prev.map((cat) => (cat.id === id ? { ...cat, ...updated } : cat))
+      prev.map((cat) =>
+        cat.id === id
+          ? { ...cat, ...updated, ...(normalizedNumbers ? { roomNumbers: normalizedNumbers } : {}) }
+          : cat
+      )
     );
-    logStaffAction('Room Management', `Updated room category ID "${id}"`);
+
+    if (normalizedNumbers) {
+      setRoomInstancesState((prev) => {
+        const otherInstances = prev.filter((inst) => inst.categoryId !== id);
+        const existingForCat = prev.filter((inst) => inst.categoryId === id);
+        const syncedForCat: RoomInstanceStatus[] = normalizedNumbers.map((roomNumber) => {
+          const existing = existingForCat.find((inst) => inst.roomNumber === roomNumber);
+          return existing || { roomNumber, categoryId: id, status: 'Available' };
+        });
+        return [...otherInstances, ...syncedForCat];
+      });
+    }
+
+    const target = roomCategories.find((c) => c.id === id);
+    logStaffAction('Room Management', `Updated room category "${updated.title || target?.title || id}"`);
   };
 
   const deleteRoomCategory = (id: string) => {
     const target = roomCategories.find((c) => c.id === id);
     setRoomCategoriesState((prev) => prev.filter((cat) => cat.id !== id));
     setRoomInstancesState((prev) => prev.filter((inst) => inst.categoryId !== id));
-    logStaffAction('Room Management', `Deleted room category: "${target?.title || id}"`);
+    logStaffAction('Room Management', `Deleted room category "${target?.title || id}"`);
   };
 
   const updateRoomInstanceStatus = (roomNumber: string, status: RoomStatus) => {
@@ -308,36 +430,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
 
-    const targetInst = roomInstances.find((i) => i.roomNumber === roomNumber);
-    if (targetInst) {
-      logStaffAction(
-        'Room Management',
-        `Updated Room #${roomNumber} live availability status to "${status}"`
-      );
-    }
+    logStaffAction(
+      'Room Management',
+      `Updated Room #${roomNumber} live availability status to "${status}"`
+    );
   };
 
-  // Amenities
   const addAmenity = (amenityData: Omit<Amenity, 'id'>) => {
     const newAmenity: Amenity = { ...amenityData, id: `amenity-${Date.now()}` };
     setAmenitiesState((prev) => [...prev, newAmenity]);
-    logStaffAction('Amenity Change', `Added amenity: "${newAmenity.name}"`);
+    logStaffAction('Amenity Change', `Added amenity "${newAmenity.name}"`);
   };
 
   const updateAmenity = (id: string, updated: Partial<Amenity>) => {
-    setAmenitiesState((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...updated } : a))
-    );
-    logStaffAction('Amenity Change', `Updated amenity ID "${id}"`);
+    const target = amenities.find((a) => a.id === id);
+    setAmenitiesState((prev) => prev.map((a) => (a.id === id ? { ...a, ...updated } : a)));
+    logStaffAction('Amenity Change', `Updated amenity "${updated.name || target?.name || id}"`);
   };
 
   const deleteAmenity = (id: string) => {
     const target = amenities.find((a) => a.id === id);
     setAmenitiesState((prev) => prev.filter((a) => a.id !== id));
-    logStaffAction('Amenity Change', `Deleted amenity: "${target?.name || id}"`);
+    setRoomCategoriesState((prev) =>
+      prev.map((cat) => ({
+        ...cat,
+        amenityIds: cat.amenityIds.filter((aid) => aid !== id),
+      }))
+    );
+    logStaffAction('Amenity Change', `Deleted amenity "${target?.name || id}"`);
   };
 
-  // Promo Codes
   const addPromoCode = (codeData: Omit<PromoCode, 'id' | 'usageCount'>) => {
     const newPromo: PromoCode = {
       ...codeData,
@@ -350,107 +472,181 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updatePromoCode = (id: string, updated: Partial<PromoCode>) => {
-    setPromoCodesState((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-    );
-    logStaffAction('Promo Code', `Updated promo code ID "${id}"`);
+    setPromoCodesState((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+    const target = promoCodes.find((p) => p.id === id);
+    logStaffAction('Promo Code', `Updated promo code "${target?.code || id}"`);
   };
 
   const deletePromoCode = (id: string) => {
     const target = promoCodes.find((p) => p.id === id);
     setPromoCodesState((prev) => prev.filter((p) => p.id !== id));
-    logStaffAction('Promo Code', `Deleted promo code: "${target?.code || id}"`);
+    logStaffAction('Promo Code', `Deleted promo code "${target?.code || id}"`);
   };
 
-  const validatePromoCode = (codeStr: string, totalAmount: number) => {
-    const clean = codeStr.trim().toUpperCase();
-    const found = promoCodes.find((p) => p.code === clean && p.isActive);
+  const validatePromoCode = (codeStr: string, totalAmount: number) =>
+    evaluatePromoCode(promoCodes, codeStr, totalAmount);
 
-    if (!found) {
-      return { valid: false, discount: 0, message: 'Invalid or inactive promo code.' };
-    }
-
-    if (totalAmount < found.minBookingAmount) {
+  const createBooking = (bookingData: CreateBookingInput): CreateBookingResult => {
+    const nights = calculateStayNights(bookingData.checkInDate, bookingData.checkOutDate);
+    if (nights < 1) {
       return {
-        valid: false,
-        discount: 0,
-        message: `Minimum booking total of ₹${found.minBookingAmount} required for ${found.code}.`,
+        success: false,
+        message: 'Check-out date must be at least 1 night after check-in date.',
       };
     }
 
-    let discount = 0;
-    if (found.discountType === 'flat') {
-      discount = found.discountValue;
-    } else {
-      discount = Math.round((totalAmount * found.discountValue) / 100);
+    const category = roomCategories.find((c) => c.id === bookingData.categoryId);
+    if (!category) {
+      return { success: false, message: 'Selected room category no longer exists.' };
     }
 
-    return {
-      valid: true,
-      promo: found,
-      discount,
-      message: `Coupon applied! You save ₹${discount}.`,
-    };
-  };
+    let assignedRoom = bookingData.roomNumberAssigned;
+    if (assignedRoom) {
+      const inst = roomInstances.find((r) => r.roomNumber === assignedRoom);
+      const occupied =
+        (inst && inst.status !== 'Available') ||
+        isRoomBookedForDates(assignedRoom, bookingData.checkInDate, bookingData.checkOutDate, bookings);
+      if (occupied) {
+        assignedRoom = undefined;
+      }
+    }
 
-  // Bookings
-  const createBooking = (bookingData: Omit<Booking, 'id' | 'createdAt'>) => {
-    const id = `KGH-BKG-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (!assignedRoom) {
+      assignedRoom = findAvailableRoomForBooking(
+        category,
+        roomInstances,
+        bookings,
+        bookingData.checkInDate,
+        bookingData.checkOutDate
+      );
+    }
+
+    if (!assignedRoom) {
+      return {
+        success: false,
+        message: 'No rooms in this category are available for your selected dates.',
+      };
+    }
+
+    const id = generateBookingId(bookings);
     const newBooking: Booking = {
       ...bookingData,
       id,
+      roomNumberAssigned: assignedRoom,
+      stayDurationDays: nights,
       createdAt: new Date().toISOString(),
     };
 
     setBookingsState((prev) => [newBooking, ...prev]);
 
-    // Increment promo usage if applied
     if (bookingData.promoCodeApplied) {
-      const p = promoCodes.find((pc) => pc.code === bookingData.promoCodeApplied);
-      if (p) {
-        updatePromoCode(p.id, { usageCount: p.usageCount + 1 });
-      }
+      setPromoCodesState((prev) =>
+        prev.map((pc) =>
+          pc.code === bookingData.promoCodeApplied
+            ? { ...pc, usageCount: pc.usageCount + 1 }
+            : pc
+        )
+      );
     }
 
-    logStaffAction(
-      'Booking Action',
-      `New Booking #${id} created for guest "${bookingData.guestName}" (${bookingData.categoryTitle})`
-    );
-
-    return newBooking;
-  };
-
-  const updateBookingStatus = (id: string, status: Booking['bookingStatus'], roomNumber?: string) => {
-    setBookingsState((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? {
-              ...b,
-              bookingStatus: status,
-              roomNumberAssigned: roomNumber || b.roomNumberAssigned,
-            }
-          : b
+    const targetStatus: RoomStatus =
+      newBooking.bookingStatus === 'Checked-In' ? 'Occupied' : 'Reserved';
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const staffName = currentUser?.name || 'Online Portal';
+    setRoomInstancesState((prev) =>
+      prev.map((inst) =>
+        inst.roomNumber === assignedRoom
+          ? { ...inst, status: targetStatus, lastUpdatedBy: staffName, lastUpdatedAt: timestamp }
+          : inst
       )
     );
 
-    // If checked in or assigned room, update room instance
-    if (roomNumber && (status === 'Checked-In' || status === 'Confirmed')) {
-      updateRoomInstanceStatus(roomNumber, 'Occupied');
-    }
+    logStaffAction(
+      'Booking Action',
+      `New Booking #${id} created for "${bookingData.guestName}" (${bookingData.categoryTitle}, Room #${assignedRoom})`
+    );
 
-    logStaffAction('Booking Action', `Booking #${id} status updated to "${status}"${roomNumber ? ` (Room ${roomNumber})` : ''}`);
+    return { success: true, booking: newBooking, message: 'Booking confirmed!' };
   };
 
-  // FAQs
+  const updateBookingStatus = (
+    id: string,
+    status: Booking['bookingStatus'],
+    roomNumber?: string
+  ) => {
+    const existing = bookings.find((b) => b.id === id);
+    if (!existing) return;
+
+    const previousRoom = existing.roomNumberAssigned;
+    const assignedRoom = roomNumber !== undefined ? roomNumber || undefined : previousRoom;
+
+    const updatedBookings = bookings.map((b) =>
+      b.id === id
+        ? {
+            ...b,
+            bookingStatus: status,
+            roomNumberAssigned: assignedRoom,
+          }
+        : b
+    );
+    setBookingsState(updatedBookings);
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const staffName = currentUser?.name || 'Staff';
+
+    const roomHasOtherActiveBooking = (rm: string) =>
+      updatedBookings.some(
+        (b) =>
+          b.id !== id &&
+          b.roomNumberAssigned === rm &&
+          (b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Checked-In')
+      );
+
+    setRoomInstancesState((prev) =>
+      prev.map((inst) => {
+        if (previousRoom && previousRoom !== assignedRoom && inst.roomNumber === previousRoom) {
+          if (!roomHasOtherActiveBooking(previousRoom)) {
+            return { ...inst, status: 'Available', lastUpdatedBy: staffName, lastUpdatedAt: timestamp };
+          }
+        }
+        if (assignedRoom && inst.roomNumber === assignedRoom) {
+          if (status === 'Checked-In') {
+            return { ...inst, status: 'Occupied', lastUpdatedBy: staffName, lastUpdatedAt: timestamp };
+          }
+          if (status === 'Confirmed') {
+            return { ...inst, status: 'Reserved', lastUpdatedBy: staffName, lastUpdatedAt: timestamp };
+          }
+          if (status === 'Checked-Out' && !roomHasOtherActiveBooking(assignedRoom)) {
+            return {
+              ...inst,
+              status: 'Cleaning/Maintenance',
+              lastUpdatedBy: staffName,
+              lastUpdatedAt: timestamp,
+            };
+          }
+          if (status === 'Cancelled' && !roomHasOtherActiveBooking(assignedRoom)) {
+            return { ...inst, status: 'Available', lastUpdatedBy: staffName, lastUpdatedAt: timestamp };
+          }
+        }
+        return inst;
+      })
+    );
+
+    logStaffAction(
+      'Booking Action',
+      `Booking #${id} status updated to "${status}"${assignedRoom ? ` (Room #${assignedRoom})` : ''}`
+    );
+  };
+
   const addFAQ = (faqData: Omit<FAQItem, 'id'>) => {
     const newFAQ: FAQItem = { ...faqData, id: `faq-${Date.now()}` };
     setFaqsState((prev) => [...prev, newFAQ]);
-    logStaffAction('System Setting', `Added FAQ question: "${newFAQ.question}"`);
+    logStaffAction('System Setting', `Added FAQ: "${newFAQ.question}"`);
   };
 
   const updateFAQ = (id: string, updated: Partial<FAQItem>) => {
     setFaqsState((prev) => prev.map((f) => (f.id === id ? { ...f, ...updated } : f)));
-    logStaffAction('System Setting', `Updated FAQ ID "${id}"`);
+    logStaffAction('System Setting', `Updated FAQ "${updated.question || id}"`);
   };
 
   const deleteFAQ = (id: string) => {
@@ -459,13 +655,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logStaffAction('System Setting', `Deleted FAQ: "${target?.question || id}"`);
   };
 
-  // Hotel Config
   const updateHotelConfig = (config: Partial<HotelConfig>) => {
     setHotelConfigState((prev) => ({ ...prev, ...config }));
-    logStaffAction('System Setting', `Updated Hotel Details & Peak Season rules.`);
+    logStaffAction('System Setting', 'Updated Hotel Details & Seasonal Configuration.');
   };
 
-  // Staff User Management
   const addStaffUser = (userData: Omit<User, 'id' | 'createdAt'>) => {
     const newUser: User = {
       ...userData,
@@ -473,29 +667,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setUsersState((prev) => [...prev, newUser]);
-    logStaffAction('Staff Config', `Created new staff account: ${newUser.name} (${newUser.role})`);
+    logStaffAction('Staff Config', `Created user account: ${newUser.name} (${newUser.role})`);
   };
 
   const deleteStaffUser = (userId: string) => {
     const target = users.find((u) => u.id === userId);
+    if (!target || target.role === 'super_admin' || target.id === currentUser?.id) return;
     setUsersState((prev) => prev.filter((u) => u.id !== userId));
-    logStaffAction('Staff Config', `Deleted staff account: ${target?.name || userId}`);
+    logStaffAction('Staff Config', `Deleted user account: ${target.name}`);
   };
 
-  // Reset to Default
   const resetToDefaultData = () => {
+    STORAGE_KEYS.forEach((key) => {
+      localStorage.removeItem(`kgh_${key}`);
+    });
+    const nextActor = currentUser?.role === 'super_admin' ? initialUsers[0] : null;
     setHotelConfigState(initialHotelConfig);
     setUsersState(initialUsers);
-    setCurrentUserState(initialUsers[3]);
+    setCurrentUserState(nextActor);
     setRoomCategoriesState(initialRoomCategories);
     setRoomInstancesState(initialRoomInstances);
     setAmenitiesState(initialAmenities);
     setPromoCodesState(initialPromoCodes);
     setBookingsState(initialBookings);
-    setAuditLogsState(initialAuditLogs);
     setFaqsState(initialFAQs);
-    localStorage.clear();
-    logStaffAction('System Setting', 'Reset system state to default factory seeds.');
+    setAuditLogsState([
+      createAuditEntry(nextActor, 'System Setting', 'Reset system state to default seeds.'),
+      ...initialAuditLogs,
+    ]);
   };
 
   return (
@@ -513,6 +712,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         faqs,
         activeView,
         adminTab,
+        roomClimateFilter,
+        roomBedFilter,
         isLoginModalOpen,
         isBookingModalOpen,
         selectedCategoryForBooking,
@@ -521,6 +722,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showWelcomeModal,
         setActiveView,
         setAdminTab,
+        setRoomClimateFilter,
+        setRoomBedFilter,
         setIsLoginModalOpen,
         setIsBookingModalOpen,
         setSelectedCategoryForBooking,
@@ -528,8 +731,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setShowWelcomeModal,
         triggerWelcomeAnimation,
         login,
+        registerCustomer,
         logout,
-        switchRoleDemo,
         logStaffAction,
         addRoomCategory,
         updateRoomCategory,
